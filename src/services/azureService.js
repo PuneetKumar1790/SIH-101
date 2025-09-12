@@ -1,62 +1,79 @@
-const { BlobServiceClient } = require('@azure/storage-blob');
-const { DefaultAzureCredential } = require('@azure/identity');
-const { logInfo, logError } = require('../utils/logger');
+const {
+  BlobServiceClient,
+  StorageSharedKeyCredential,
+  generateBlobSASQueryParameters,
+  BlobSASPermissions,
+} = require("@azure/storage-blob");
+const { logInfo, logError } = require("../utils/logger");
 
 class AzureBlobService {
   constructor() {
     this.accountName = process.env.AZURE_STORAGE_ACCOUNT_NAME;
     this.containerName = process.env.AZURE_STORAGE_CONTAINER_NAME;
     this.accountKey = process.env.AZURE_STORAGE_ACCOUNT_KEY;
-    
+
     if (!this.accountName || !this.containerName) {
-      throw new Error('Azure Storage account name and container name are required');
+      throw new Error(
+        "Azure Storage account name and container name are required"
+      );
     }
 
-    // Initialize BlobServiceClient
-    this.blobServiceClient = new BlobServiceClient(
-      `https://${this.accountName}.blob.core.windows.net`,
-      this.accountKey ? 
-        new DefaultAzureCredential() : 
-        new DefaultAzureCredential()
+    if (this.accountKey) {
+      // ✅ Use shared key authentication
+      this.sharedKeyCredential = new StorageSharedKeyCredential(
+        this.accountName,
+        this.accountKey
+      );
+      this.blobServiceClient = new BlobServiceClient(
+        `https://${this.accountName}.blob.core.windows.net`,
+        this.sharedKeyCredential
+      );
+    } else {
+      throw new Error(
+        "AZURE_STORAGE_ACCOUNT_KEY is missing. Please add it to your .env file."
+      );
+    }
+
+    this.containerClient = this.blobServiceClient.getContainerClient(
+      this.containerName
     );
-    
-    this.containerClient = this.blobServiceClient.getContainerClient(this.containerName);
   }
 
   // Upload file to Azure Blob Storage
   async uploadFile(fileName, fileBuffer, contentType) {
     try {
       const blockBlobClient = this.containerClient.getBlockBlobClient(fileName);
-      
+
       const uploadOptions = {
         blobHTTPHeaders: {
-          blobContentType: contentType
+          blobContentType: contentType,
         },
         metadata: {
           uploadedAt: new Date().toISOString(),
-          originalSize: fileBuffer.length.toString()
-        }
+          originalSize: fileBuffer.length.toString(),
+        },
       };
-      
-      await blockBlobClient.upload(fileBuffer, fileBuffer.length, uploadOptions);
-      
-      logInfo('File uploaded to Azure successfully', {
+
+      await blockBlobClient.upload(
+        fileBuffer,
+        fileBuffer.length,
+        uploadOptions
+      );
+
+      logInfo("File uploaded to Azure successfully", {
         fileName,
         size: fileBuffer.length,
-        contentType
+        contentType,
       });
-      
+
       return {
         success: true,
         url: blockBlobClient.url,
-        fileName: fileName
+        fileName,
       };
     } catch (error) {
-      logError('Azure upload error', error, { fileName, contentType });
-      return {
-        success: false,
-        error: error.message
-      };
+      logError("Azure upload error", error, { fileName, contentType });
+      return { success: false, error: error.message };
     }
   }
 
@@ -66,29 +83,32 @@ class AzureBlobService {
       const blockBlobClient = this.containerClient.getBlockBlobClient(fileName);
       const expiresOn = new Date();
       expiresOn.setMinutes(expiresOn.getMinutes() + expiresInMinutes);
-      
-      const url = await blockBlobClient.generateSasUrl({
-        permissions: 'r', // Read permission
-        expiresOn: expiresOn
-      });
-      
-      logInfo('Signed URL generated successfully', {
+
+      const sasToken = generateBlobSASQueryParameters(
+        {
+          containerName: this.containerName,
+          blobName: fileName,
+          permissions: BlobSASPermissions.parse("r"), // Read-only
+          expiresOn,
+        },
+        this.sharedKeyCredential
+      ).toString();
+
+      const url = `${blockBlobClient.url}?${sasToken}`;
+
+      logInfo("Signed URL generated successfully", {
         fileName,
         expiresInMinutes,
-        expiresOn
+        expiresOn,
       });
-      
-      return {
-        success: true,
-        url: url,
-        expiresOn: expiresOn
-      };
+
+      return { success: true, url, expiresOn };
     } catch (error) {
-      logError('Azure signed URL generation error', error, { fileName, expiresInMinutes });
-      return {
-        success: false,
-        error: error.message
-      };
+      logError("Azure signed URL generation error", error, {
+        fileName,
+        expiresInMinutes,
+      });
+      return { success: false, error: error.message };
     }
   }
 
@@ -97,19 +117,12 @@ class AzureBlobService {
     try {
       const blockBlobClient = this.containerClient.getBlockBlobClient(fileName);
       await blockBlobClient.delete();
-      
-      logInfo('File deleted from Azure successfully', { fileName });
-      
-      return {
-        success: true,
-        message: 'File deleted successfully'
-      };
+
+      logInfo("File deleted from Azure successfully", { fileName });
+      return { success: true, message: "File deleted successfully" };
     } catch (error) {
-      logError('Azure delete error', error, { fileName });
-      return {
-        success: false,
-        error: error.message
-      };
+      logError("Azure delete error", error, { fileName });
+      return { success: false, error: error.message };
     }
   }
 
@@ -118,17 +131,10 @@ class AzureBlobService {
     try {
       const blockBlobClient = this.containerClient.getBlockBlobClient(fileName);
       const exists = await blockBlobClient.exists();
-      
-      return {
-        success: true,
-        exists: exists
-      };
+      return { success: true, exists };
     } catch (error) {
-      logError('Azure file exists check error', error, { fileName });
-      return {
-        success: false,
-        error: error.message
-      };
+      logError("Azure file exists check error", error, { fileName });
+      return { success: false, error: error.message };
     }
   }
 
@@ -137,7 +143,6 @@ class AzureBlobService {
     try {
       const blockBlobClient = this.containerClient.getBlockBlobClient(fileName);
       const properties = await blockBlobClient.getProperties();
-      
       return {
         success: true,
         properties: {
@@ -145,166 +150,136 @@ class AzureBlobService {
           contentType: properties.contentType,
           lastModified: properties.lastModified,
           etag: properties.etag,
-          metadata: properties.metadata
-        }
+          metadata: properties.metadata,
+        },
       };
     } catch (error) {
-      logError('Azure file properties retrieval error', error, { fileName });
-      return {
-        success: false,
-        error: error.message
-      };
+      logError("Azure file properties retrieval error", error, { fileName });
+      return { success: false, error: error.message };
     }
   }
 
   // List files in a directory
-  async listFiles(prefix = '', maxResults = 100) {
+  async listFiles(prefix = "", maxResults = 100) {
     try {
       const files = [];
-      
       for await (const blob of this.containerClient.listBlobsFlat({
-        prefix: prefix,
-        includeMetadata: true
+        prefix,
+        includeMetadata: true,
       })) {
         files.push({
           name: blob.name,
           size: blob.properties.contentLength,
           contentType: blob.properties.contentType,
           lastModified: blob.properties.lastModified,
-          metadata: blob.metadata
+          metadata: blob.metadata,
         });
-        
-        if (files.length >= maxResults) {
-          break;
-        }
+        if (files.length >= maxResults) break;
       }
-      
-      return {
-        success: true,
-        files: files
-      };
+      return { success: true, files };
     } catch (error) {
-      logError('Azure list files error', error, { prefix, maxResults });
-      return {
-        success: false,
-        error: error.message
-      };
+      logError("Azure list files error", error, { prefix, maxResults });
+      return { success: false, error: error.message };
     }
   }
 
   // Copy file within Azure Storage
   async copyFile(sourceFileName, destinationFileName) {
     try {
-      const sourceBlobClient = this.containerClient.getBlockBlobClient(sourceFileName);
-      const destinationBlobClient = this.containerClient.getBlockBlobClient(destinationFileName);
-      
-      const copyOperation = await destinationBlobClient.syncCopyFromURL(sourceBlobClient.url);
-      
-      // Wait for copy to complete
+      const sourceBlobClient =
+        this.containerClient.getBlockBlobClient(sourceFileName);
+      const destinationBlobClient =
+        this.containerClient.getBlockBlobClient(destinationFileName);
+      const copyOperation = await destinationBlobClient.syncCopyFromURL(
+        sourceBlobClient.url
+      );
+
       let copyStatus = copyOperation.copyStatus;
-      while (copyStatus === 'pending') {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+      while (copyStatus === "pending") {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
         const properties = await destinationBlobClient.getProperties();
         copyStatus = properties.copyStatus;
       }
-      
-      if (copyStatus === 'success') {
-        logInfo('File copied successfully', { sourceFileName, destinationFileName });
-        return {
-          success: true,
-          message: 'File copied successfully'
-        };
+
+      if (copyStatus === "success") {
+        logInfo("File copied successfully", {
+          sourceFileName,
+          destinationFileName,
+        });
+        return { success: true, message: "File copied successfully" };
       } else {
         throw new Error(`Copy operation failed with status: ${copyStatus}`);
       }
     } catch (error) {
-      logError('Azure copy file error', error, { sourceFileName, destinationFileName });
-      return {
-        success: false,
-        error: error.message
-      };
+      logError("Azure copy file error", error, {
+        sourceFileName,
+        destinationFileName,
+      });
+      return { success: false, error: error.message };
     }
   }
 
   // Get container statistics
   async getContainerStats() {
     try {
-      let totalSize = 0;
-      let fileCount = 0;
-      
+      let totalSize = 0,
+        fileCount = 0;
       for await (const blob of this.containerClient.listBlobsFlat({
-        includeMetadata: true
+        includeMetadata: true,
       })) {
         totalSize += blob.properties.contentLength || 0;
         fileCount++;
       }
-      
       return {
         success: true,
         stats: {
           totalFiles: fileCount,
-          totalSize: totalSize,
-          averageFileSize: fileCount > 0 ? Math.round(totalSize / fileCount) : 0
-        }
+          totalSize,
+          averageFileSize:
+            fileCount > 0 ? Math.round(totalSize / fileCount) : 0,
+        },
       };
     } catch (error) {
-      logError('Azure container stats error', error);
-      return {
-        success: false,
-        error: error.message
-      };
+      logError("Azure container stats error", error);
+      return { success: false, error: error.message };
     }
   }
 
   // Create container if it doesn't exist
   async createContainerIfNotExists() {
     try {
-      const createContainerResponse = await this.containerClient.createIfNotExists({
-        access: 'blob'
+      const response = await this.containerClient.createIfNotExists({
+        access: "blob",
       });
-      
-      if (createContainerResponse.succeeded) {
-        logInfo('Container created successfully', { containerName: this.containerName });
+      if (response.succeeded) {
+        logInfo("Container created successfully", {
+          containerName: this.containerName,
+        });
       }
-      
-      return {
-        success: true,
-        message: 'Container is ready'
-      };
+      return { success: true, message: "Container is ready" };
     } catch (error) {
-      logError('Azure container creation error', error, { containerName: this.containerName });
-      return {
-        success: false,
-        error: error.message
-      };
+      logError("Azure container creation error", error, {
+        containerName: this.containerName,
+      });
+      return { success: false, error: error.message };
     }
   }
 
   // Set container access policy
-  async setContainerAccessPolicy(accessType = 'blob') {
+  async setContainerAccessPolicy(accessType = "blob") {
     try {
-      await this.containerClient.setAccessPolicy({
-        access: accessType
+      await this.containerClient.setAccessPolicy({ access: accessType });
+      logInfo("Container access policy set successfully", {
+        containerName: this.containerName,
+        accessType,
       });
-      
-      logInfo('Container access policy set successfully', { 
-        containerName: this.containerName, 
-        accessType 
-      });
-      
-      return {
-        success: true,
-        message: 'Access policy set successfully'
-      };
+      return { success: true, message: "Access policy set successfully" };
     } catch (error) {
-      logError('Azure container access policy error', error, { 
-        containerName: this.containerName, 
-        accessType 
+      logError("Azure container access policy error", error, {
+        containerName: this.containerName,
+        accessType,
       });
-      return {
-        success: false,
-        error: error.message
-      };
+      return { success: false, error: error.message };
     }
   }
 }
