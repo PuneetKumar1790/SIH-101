@@ -117,10 +117,10 @@ const handleNotFound = (req, res, next) => {
   next(err);
 };
 
-// Handle uncaught exceptions
-process.on("uncaughtException", (err) => {
-  logger.error("UNCAUGHT EXCEPTION! 💥 Shutting down...");
-  logger.error(err.name, err.message);
+process.on("unhandledRejection", (err) => {
+  logger.error("UNHANDLED REJECTION 💥 Shutting down...");
+  logger.error(`${err.name}: ${err.message}`);
+  logger.error(err.stack);
   process.exit(1);
 });
 

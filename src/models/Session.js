@@ -52,6 +52,25 @@ const sessionSchema = new mongoose.Schema({
     title: String,
     url: String,
     order: Number,
+    fileName: String,
+    fileSize: Number,
+    originalName: String,
+    mimeType: String,
+    // Compressed version metadata
+    compressed: {
+      type: Boolean,
+      default: false
+    },
+    compressedFileName: String,
+    compressedUrl: String,
+    compressedFileSize: Number,
+    compressionRatio: Number,
+    compressionMetadata: {
+      format: String,
+      quality: Number,
+      originalDimensions: String,
+      compressedDimensions: String
+    },
     uploadedAt: {
       type: Date,
       default: Date.now
@@ -61,6 +80,24 @@ const sessionSchema = new mongoose.Schema({
     fileName: String,
     url: String,
     duration: Number, // in seconds
+    fileSize: Number,
+    originalName: String,
+    mimeType: String,
+    // Compressed version metadata
+    compressed: {
+      type: Boolean,
+      default: false
+    },
+    compressedFileName: String,
+    compressedUrl: String,
+    compressedFileSize: Number,
+    compressionRatio: Number,
+    compressionMetadata: {
+      bitrate: String,
+      sampleRate: Number,
+      channels: Number,
+      optimizedFor: String
+    },
     uploadedAt: {
       type: Date,
       default: Date.now
@@ -79,6 +116,31 @@ const sessionSchema = new mongoose.Schema({
       type: Boolean,
       default: false
     },
+    // Multiple quality versions
+    versions: [{
+      quality: {
+        type: String,
+        enum: ['240p', '360p'],
+        required: true
+      },
+      fileName: String,
+      url: String,
+      fileSize: Number,
+      compressed: {
+        type: Boolean,
+        default: true
+      }
+    }],
+    // Audio-only version extracted from video
+    audioVersion: {
+      fileName: String,
+      url: String,
+      duration: Number,
+      fileSize: Number
+    },
+    fileSize: Number,
+    originalName: String,
+    mimeType: String,
     uploadedAt: {
       type: Date,
       default: Date.now
