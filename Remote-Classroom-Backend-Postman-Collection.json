@@ -1005,66 +1005,6 @@
           }
         }
       ]
-    },
-    {
-      "name": "Video Processing",
-      "item": [
-        {
-          "name": "Process Video (Compress + Extract Audio)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "if (pm.response.code === 200) {",
-                  "    const response = pm.response.json();",
-                  "    console.log('Video processing completed:');",
-                  "    console.log('- Original file size:', response.data.metadata.originalSize);",
-                  "    console.log('- Compressed files:', response.data.compressed.length);",
-                  "    console.log('- Audio extracted:', !!response.data.audio);",
-                  "    if (response.data.audio) {",
-                  "        console.log('- Audio file size:', response.data.audio.fileSize);",
-                  "        console.log('- Compression ratio:', response.data.audio.compressionRatio + '%');",
-                  "    }",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{authToken}}"
-              }
-            ],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "video",
-                  "type": "file",
-                  "src": [],
-                  "description": "MP4 video file to process"
-                },
-                {
-                  "key": "sessionId",
-                  "value": "{{sessionId}}",
-                  "type": "text",
-                  "description": "Session ID where video will be uploaded"
-                }
-              ]
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/video-processing/process",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "video-processing", "process"]
-            },
-            "description": "Upload and process a video file:\n- Compresses to 240p and 360p\n- Extracts audio as MP3 (128kbps)\n- Uploads all files to Azure blob storage\n- Returns signed URLs for access"
-          }
-        }
-      ]
     }
   ]
 }
