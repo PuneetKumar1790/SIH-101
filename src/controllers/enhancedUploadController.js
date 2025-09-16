@@ -300,9 +300,34 @@ async function processVideoUpload(file, baseFileName, sessionId, session) {
   };
 
   // Update session with video file
-  await Session.findByIdAndUpdate(sessionId, {
+  const updateOperations = {
     $push: { videoFiles: videoFileInfo }
-  });
+  };
+
+  // If audio was extracted, also add it to audioFiles array
+  if (audioVersion) {
+    const audioFileInfo = {
+      fileName: audioVersion.fileName,
+      url: audioVersion.url,
+      duration: audioVersion.duration,
+      fileSize: audioVersion.fileSize,
+      originalName: `${file.originalname} (extracted audio)`,
+      mimeType: 'audio/mpeg',
+      compressed: false, // This is the extracted version
+      compressionRatio: audioResult.compressionRatio,
+      compressionMetadata: {
+        bitrate: audioResult.metadata.bitrate + ' bps',
+        sampleRate: audioResult.metadata.sampleRate,
+        channels: audioResult.metadata.channels,
+        optimizedFor: 'speech'
+      },
+      uploadedAt: new Date()
+    };
+    
+    updateOperations.$push.audioFiles = audioFileInfo;
+  }
+
+  await Session.findByIdAndUpdate(sessionId, updateOperations);
 
   return {
     success: true,

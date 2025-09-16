@@ -55,6 +55,10 @@ async function simulateLargePdfCompression() {
         console.log(`Compressed Size: ${pdfCompressionUtils.formatFileSize(result.compressedSize)}`);
         console.log(`Compression Ratio: ${result.compressionRatio}%`);
         
+        if (result.skipped) {
+            console.log(`Skip Reason: ${result.reason || 'Unknown'}`);
+        }
+        
         if (result.error) {
             console.log(`❌ Error: ${result.error}`);
             

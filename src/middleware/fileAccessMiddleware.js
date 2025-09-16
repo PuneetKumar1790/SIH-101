@@ -199,7 +199,8 @@ const checkFileAccess = async (req, res, next) => {
  */
 const validateFileType = (allowedTypes) => {
   return (req, res, next) => {
-    const { fileType } = req.body || req.params;
+    // Check both body and params, with proper fallback
+    const fileType = req.body?.fileType || req.params?.fileType;
     
     if (!fileType) {
       return sendError(res, 'File type is required', 400);
@@ -219,6 +220,20 @@ const validateFileType = (allowedTypes) => {
 const validateVideoQuality = (req, res, next) => {
   const { quality } = req.params;
   const allowedQualities = ['240p', '360p', 'original'];
+
+  if (quality && !allowedQualities.includes(quality)) {
+    return sendError(res, `Invalid quality. Allowed qualities: ${allowedQualities.join(', ')}`, 400);
+  }
+
+  next();
+};
+
+/**
+ * Middleware to validate file quality parameter (for slides and audio)
+ */
+const validateFileQuality = (req, res, next) => {
+  const { quality } = req.params;
+  const allowedQualities = ['original', 'compressed'];
 
   if (quality && !allowedQualities.includes(quality)) {
     return sendError(res, `Invalid quality. Allowed qualities: ${allowedQualities.join(', ')}`, 400);
@@ -328,6 +343,7 @@ module.exports = {
   checkFileAccess,
   validateFileType,
   validateVideoQuality,
+  validateFileQuality,
   checkSessionStatus,
   logFileAccess,
   checkFileSizeLimit,

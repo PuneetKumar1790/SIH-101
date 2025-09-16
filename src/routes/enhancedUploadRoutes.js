@@ -12,6 +12,7 @@ const {
   checkDeleteAccess,
   validateFileType,
   validateVideoQuality,
+  validateFileQuality,
   checkSessionStatus,
   logFileAccess,
   checkFileSizeLimit,
@@ -118,7 +119,7 @@ router.get(
   checkSessionFileAccess,
   sessionIdValidation,
   param("slideId").isMongoId().withMessage("Invalid slide ID"),
-  validateVideoQuality, // Reuse quality validation for original/compressed
+  validateFileQuality, // Use correct quality validation for original/compressed
   logFileAccess('download_slide'),
   catchAsync(enhancedUploadController.getSlideDownloadUrl)
 );
@@ -133,7 +134,7 @@ router.get(
   checkSessionFileAccess,
   sessionIdValidation,
   param("audioId").isMongoId().withMessage("Invalid audio ID"),
-  validateVideoQuality, // Reuse quality validation for original/compressed
+  validateFileQuality, // Use correct quality validation for original/compressed
   logFileAccess('download_audio'),
   catchAsync(enhancedUploadController.getAudioDownloadUrl)
 );

@@ -25,7 +25,7 @@ class PDFCompressionUtils {
   constructor() {
     this.tempDir = path.join(__dirname, '../../temp');
     this.ensureTempDir();
-    this.compressionThreshold = 5 * 1024 * 1024; // 5MB threshold
+    this.compressionThreshold = 1 * 1024 * 1024; // 1MB threshold - compress files larger than 1MB
     this.ghostscriptExecutable = this.getGhostscriptExecutable();
     this.isGhostscriptAvailable = null; // Will be checked on first use
     
@@ -67,7 +67,7 @@ class PDFCompressionUtils {
    * @returns {boolean} True if compression is needed
    */
   needsCompression(pdfBuffer) {
-    return pdfBuffer.length > this.compressionThreshold;
+    return pdfBuffer.length >= this.compressionThreshold;
   }
 
   /**
@@ -89,6 +89,15 @@ class PDFCompressionUtils {
       const originalSize = pdfBuffer.length;
       const needsCompression = this.needsCompression(pdfBuffer);
 
+      logInfo('PDF compression threshold check', {
+        originalName,
+        originalSize,
+        threshold: this.compressionThreshold,
+        formattedSize: this.formatFileSize(originalSize),
+        needsCompression,
+        sizeMB: (originalSize / (1024 * 1024)).toFixed(2)
+      });
+
       if (!needsCompression) {
         logInfo('PDF compression skipped - file size below threshold', {
           originalName,
@@ -105,7 +114,7 @@ class PDFCompressionUtils {
           compressedSize: originalSize,
           compressionRatio: 0,
           skipped: true,
-          reason: 'File size below 5MB threshold'
+          reason: 'File size below 1MB threshold'
         };
       }
 
@@ -159,10 +168,32 @@ class PDFCompressionUtils {
 
       // Cleanup is now scheduled with delay above after Ghostscript execution
 
-      // Check if compression was effective (at least 10% reduction)
-      const minCompressionThreshold = 10;
+      // Check if compression actually made the file smaller
+      if (compressedSize >= originalSize) {
+        logInfo('PDF compression ineffective - compressed file is not smaller', {
+          originalName,
+          originalSize: this.formatFileSize(originalSize),
+          compressedSize: this.formatFileSize(compressedSize),
+          compressionRatio: `${actualCompressionRatio.toFixed(2)}%`,
+          sizeDifference: this.formatFileSize(compressedSize - originalSize)
+        });
+
+        return {
+          success: true,
+          compressed: false,
+          buffer: pdfBuffer,
+          originalSize,
+          compressedSize: originalSize,
+          compressionRatio: 0,
+          skipped: true,
+          reason: `Compression ineffective - compressed file is ${this.formatFileSize(compressedSize - originalSize)} larger`
+        };
+      }
+
+      // Check if compression was effective (at least 3% reduction)
+      const minCompressionThreshold = 3;
       if (actualCompressionRatio < minCompressionThreshold) {
-        logInfo('PDF compression ineffective - using original file', {
+        logInfo('PDF compression ineffective - minimal size reduction', {
           originalName,
           originalSize: this.formatFileSize(originalSize),
           compressedSize: this.formatFileSize(compressedSize),
@@ -178,7 +209,7 @@ class PDFCompressionUtils {
           compressedSize: originalSize,
           compressionRatio: 0,
           skipped: true,
-          reason: 'Compression ineffective (less than 10% reduction)'
+          reason: `Compression ineffective (less than ${minCompressionThreshold}% reduction)`
         };
       }
 
@@ -257,11 +288,11 @@ class PDFCompressionUtils {
    * @returns {Array} Ghostscript arguments array
    */
   buildGhostscriptArgs(inputPath, outputPath, fileSize = 0) {
-    // Use /screen preset for faster compression on Windows, especially for large files
-    // Lower DPI settings for faster processing
+    // Use /screen preset for more aggressive compression
+    // More aggressive settings for better compression
     const isLargeFile = fileSize > this.largeFileThreshold;
-    const preset = isWindows ? '/screen' : '/ebook'; // Faster /screen on Windows
-    const imageDPI = isLargeFile ? 100 : 120; // Lower DPI for large files
+    const preset = '/screen'; // Use screen preset for more aggressive compression
+    const imageDPI = isLargeFile ? 72 : 100; // Lower DPI for more aggressive compression
     
     const gsArgs = [
       '-sDEVICE=pdfwrite',
@@ -281,6 +312,9 @@ class PDFCompressionUtils {
       '-dSubsetFonts=true',
       '-dAutoRotatePages=/None',
       '-dDetectDuplicateImages=true',
+      '-dCompressFonts=true',
+      '-dCompressStreams=true',
+      '-dUseFlateCompression=true',
       `-sOutputFile=${outputPath}`, // No quotes - spawn handles this
       inputPath // No quotes - spawn handles this
     ];
