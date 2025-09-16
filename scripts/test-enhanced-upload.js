@@ -32,11 +32,11 @@ async function testFileUpload() {
     console.log('1. Testing video upload with compression...');
     
     // Create a test video file (you would replace this with an actual video file)
-    const testVideoPath = path.join(__dirname, '../test-files/sample-video.mp4');
+    const testPdfPath = path.join(__dirname, '../temp/compressed_test.pdf');
     
-    if (!fs.existsSync(testVideoPath)) {
-      console.log('❌ Test video file not found. Please create a sample video file at:', testVideoPath);
-      console.log('   You can use any MP4 video file for testing.\n');
+    if (!fs.existsSync(testPdfPath)) {
+      console.log('❌ Test pdf file not found. Please create a sample pdf file at:', testPdfPath);
+      console.log('   You can use any pdf file for testing.\n');
       return;
     }
 

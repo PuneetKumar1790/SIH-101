@@ -127,21 +127,46 @@ if (pm.response.code === 200) {
 
 ### 📚 Session Management Endpoints
 
-#### 1. Create Session (Teacher Only)
+#### 1. Create Test Session
 - **Method**: `POST`
 - **URL**: `{{api_url}}/sessions/create`
 - **Headers**: 
   - `Authorization: Bearer {{access_token}}`
   - `Content-Type: application/json`
+- **Pre-request Script**:
+```javascript
+// Generate current time + 5 minutes (allows immediate start)
+const futureDate = new Date();
+futureDate.setTime(futureDate.getTime() + (5 * 60 * 1000)); // Add 5 minutes
+const isoString = futureDate.toISOString();
+pm.environment.set("future_date", isoString);
+console.log("📅 Using future date:", isoString);
+```
 - **Body** (raw JSON):
 ```json
 {
   "title": "Test Session",
   "description": "This is a test session for API testing",
-  "startTime": "2024-12-20T10:00:00.000Z",
+  "startTime": "{{future_date}}",
   "maxStudents": 50
 }
 ```
+
+**🔧 Alternative: Manual Date Entry**
+For immediate testing, use current time + 5 minutes:
+```json
+{
+  "title": "Test Session",
+  "description": "This is a test session for API testing",
+  "startTime": "2025-09-16T13:35:00.000Z",
+  "maxStudents": 50
+}
+```
+
+**⚠️ Session Start Timing:**
+- Sessions can only be started **at or after** their scheduled `startTime`
+- For testing, set `startTime` to current time + 5 minutes
+- This allows immediate session start after creation
 - **Test Script**: Save session ID
 ```javascript
 if (pm.response.code === 201) {
@@ -359,15 +384,75 @@ if (pm.response.code === 201) {
 
 ### 🚀 Enhanced Upload Endpoints
 
-#### 1. Enhanced File Upload (Teacher Only)
+#### 1. Enhanced PDF Upload with Compression (Teacher Only)
 - **Method**: `POST`
 - **URL**: `{{api_url}}/upload/enhanced`
 - **Headers**: `Authorization: Bearer {{access_token}}`
 - **Body**: form-data
   - `sessionId`: `{{session_id}}` (Type: Text)
-  - `fileType`: `slide` (or `audio`, `video`) (Type: Text)
-  - `title`: `Enhanced Test File` (Type: Text)
-  - `file`: (Type: File) - **IMPORTANT: Select an actual file**
+  - `fileType`: `slide` (Type: Text)
+  - `title`: `PDF Compression Test` (Type: Text)
+  - `file`: (Type: File) - **Select a PDF file (5-50MB recommended for testing)**
+
+**📊 Expected Response for PDF Upload:**
+```json
+{
+  "success": true,
+  "message": "File uploaded and processed successfully",
+  "data": {
+    "file": {
+      "_id": "67890abcdef123456789",
+      "fileName": "test_slides_20241220_abc123.pdf",
+      "originalName": "test_slides.pdf",
+      "fileSize": 15728640,
+      "compressed": true,
+      "compressedFileName": "test_slides_20241220_abc123_compressed.pdf",
+      "compressedFileSize": 2359296,
+      "compressionRatio": 85.0,
+      "processingTime": 2340,
+      "compressionMethod": "ghostscript-spawn"
+    }
+  }
+}
+```
+
+**🧪 Test Script for PDF Compression:**
+```javascript
+pm.test("PDF Upload Successful", function () {
+    pm.response.to.have.status(200);
+    const response = pm.response.json();
+    pm.expect(response.success).to.be.true;
+});
+
+pm.test("PDF Compression Applied", function () {
+    const response = pm.response.json();
+    if (response.data && response.data.file) {
+        const file = response.data.file;
+        pm.expect(file.compressed).to.be.true;
+        pm.expect(file.compressionRatio).to.be.above(0);
+        pm.expect(file.compressedFileSize).to.be.below(file.fileSize);
+        
+        // Log compression stats
+        console.log(`📊 Compression Stats:`);
+        console.log(`Original Size: ${(file.fileSize / 1024 / 1024).toFixed(2)} MB`);
+        console.log(`Compressed Size: ${(file.compressedFileSize / 1024 / 1024).toFixed(2)} MB`);
+        console.log(`Compression Ratio: ${file.compressionRatio}%`);
+        console.log(`Processing Time: ${file.processingTime}ms`);
+        console.log(`Method: ${file.compressionMethod}`);
+        
+        // Save file ID for further testing
+        pm.environment.set("pdf_file_id", file._id);
+    }
+});
+
+pm.test("Processing Time Reasonable", function () {
+    const response = pm.response.json();
+    if (response.data && response.data.file) {
+        // Should process within 30 seconds for most PDFs
+        pm.expect(response.data.file.processingTime).to.be.below(30000);
+    }
+});
+```
 
 **⚠️ Common Issues with Enhanced Upload:**
 - **404 Error**: Usually means missing authentication or wrong method
@@ -417,10 +502,96 @@ if (pm.response.code === 201) {
 - **URL**: `{{api_url}}/upload/session/{{session_id}}/audio/AUDIO_ID/download/compressed`
 - **Headers**: `Authorization: Bearer {{access_token}}`
 
-#### 6. Delete File (Teacher Only)
+#### 4. Delete File (Teacher Only)
 - **Method**: `DELETE`
-- **URL**: `{{api_url}}/upload/session/{{session_id}}/slide/FILE_ID`
+- **URL**: `{{api_url}}/upload/session/{{session_id}}/slide/{{pdf_file_id}}`
 - **Headers**: `Authorization: Bearer {{access_token}}`
+
+### 📋 PDF Compression Test Scenarios
+
+#### Test Case 1: Small PDF (< 5MB)
+- **File**: Use a small PDF (1-5MB)
+- **Expected**: Should compress quickly (< 5 seconds)
+- **Compression**: 60-85% typical reduction
+
+#### Test Case 2: Medium PDF (5-20MB)
+- **File**: Use a medium PDF (5-20MB)
+- **Expected**: Should compress within 10-30 seconds
+- **Compression**: 70-90% typical reduction
+
+#### Test Case 3: Large PDF (20-50MB)
+- **File**: Use a large PDF (20-50MB)
+- **Expected**: Should use adaptive timeout (up to 5 minutes)
+- **Compression**: 80-95% typical reduction
+
+#### Test Case 4: Concurrent PDF Uploads
+- **Setup**: Upload 3-4 PDFs simultaneously
+- **Expected**: All should process without timeouts
+- **Method**: Use Collection Runner with 4 iterations
+
+#### Test Case 5: Error Handling
+- **Test**: Upload non-PDF file with `fileType: slide`
+- **Expected**: Should return validation error
+- **Test**: Upload corrupted PDF
+- **Expected**: Should fallback gracefully
+
+### 🔧 PDF Compression Performance Testing
+
+#### Batch Upload Test
+Create a new request for batch testing:
+- **Method**: `POST`
+- **URL**: `{{api_url}}/upload/enhanced`
+- **Pre-request Script**:
+```javascript
+// Generate unique title for each iteration
+const iteration = pm.info.iteration || 1;
+pm.environment.set("test_title", `PDF Test ${iteration} - ${Date.now()}`);
+```
+- **Body**: form-data
+  - `sessionId`: `{{session_id}}`
+  - `fileType`: `slide`
+  - `title`: `{{test_title}}`
+  - `file`: [Select PDF file]
+
+#### Performance Monitoring Script
+Add to Tests tab:
+```javascript
+// Track performance across iterations
+const iteration = pm.info.iteration || 1;
+const response = pm.response.json();
+
+if (response.success && response.data.file) {
+    const file = response.data.file;
+    const stats = {
+        iteration: iteration,
+        originalSize: file.fileSize,
+        compressedSize: file.compressedFileSize,
+        compressionRatio: file.compressionRatio,
+        processingTime: file.processingTime,
+        method: file.compressionMethod
+    };
+    
+    console.log(`📊 Iteration ${iteration} Stats:`, JSON.stringify(stats, null, 2));
+    
+    // Store in global variable for analysis
+    if (!pm.globals.get("performance_data")) {
+        pm.globals.set("performance_data", JSON.stringify([]));
+    }
+    
+    const perfData = JSON.parse(pm.globals.get("performance_data"));
+    perfData.push(stats);
+    pm.globals.set("performance_data", JSON.stringify(perfData));
+    
+    // Calculate averages after 5+ iterations
+    if (perfData.length >= 5) {
+        const avgProcessingTime = perfData.reduce((sum, d) => sum + d.processingTime, 0) / perfData.length;
+        const avgCompressionRatio = perfData.reduce((sum, d) => sum + d.compressionRatio, 0) / perfData.length;
+        
+        console.log(`📈 Performance Summary (${perfData.length} tests):`);
+        console.log(`Average Processing Time: ${avgProcessingTime.toFixed(0)}ms`);
+        console.log(`Average Compression Ratio: ${avgCompressionRatio.toFixed(1)}%`);
+    }
+}
 
 ### 🏥 Health Check Endpoints
 

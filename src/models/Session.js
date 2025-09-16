@@ -69,9 +69,34 @@ const sessionSchema = new mongoose.Schema({
       format: String,
       quality: Number,
       originalDimensions: String,
-      compressedDimensions: String
+      compressedDimensions: String,
+      preset: String, // Ghostscript preset used (e.g., 'ebook')
+      tool: String, // Compression tool used
+      spaceSaved: Number,
+      compressionDate: String
+    },
+    // Enhanced PDF-specific metadata
+    originalUrl: String,
+    originalSize: Number,
+    compressedSize: Number,
+    compressionSkipped: {
+      type: Boolean,
+      default: false
+    },
+    compressionError: String,
+    compressionStats: {
+      originalSize: String,
+      compressedSize: String,
+      compressionRatio: String,
+      spaceSaved: String,
+      status: String,
+      compressionEffective: Boolean
     },
     uploadedAt: {
+      type: Date,
+      default: Date.now
+    },
+    processedAt: {
       type: Date,
       default: Date.now
     }

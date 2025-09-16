@@ -1,0 +1,828 @@
+{
+	"info": {
+		"_postman_id": "pdf-compression-tests",
+		"name": "PDF Compression Testing - Remote Classroom",
+		"description": "Comprehensive testing collection for PDF compression functionality in the Remote Classroom Backend",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "🔐 Authentication",
+			"item": [
+				{
+					"name": "Login (Get Token)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set(\"access_token\", response.data.tokens.accessToken);",
+									"    pm.environment.set(\"refresh_token\", response.data.tokens.refreshToken);",
+									"    pm.environment.set(\"user_id\", response.data.user._id);",
+									"    console.log(\"✅ Tokens saved to environment\");",
+									"} else {",
+									"    console.log(\"❌ Login failed:\", pm.response.text());",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"teacher@example.com\",\n  \"password\": \"password123\"\n}"
+						},
+						"url": {
+							"raw": "{{api_url}}/auth/login",
+							"host": ["{{api_url}}"],
+							"path": ["auth", "login"]
+						}
+					}
+				},
+				{
+					"name": "Get Profile (Verify Token)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Token is valid\", function () {",
+									"    pm.response.to.have.status(200);",
+									"    const response = pm.response.json();",
+									"    pm.expect(response.success).to.be.true;",
+									"    console.log(\"✅ Token is valid for user:\", response.data.user.name);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{api_url}}/auth/profile",
+							"host": ["{{api_url}}"],
+							"path": ["auth", "profile"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "📚 Session Setup",
+			"item": [
+				{
+					"name": "Create Test Session",
+					"event": [
+						{
+							"listen": "pre-request",
+							"script": {
+								"exec": [
+									"// Generate future date (2 hours from now to be safe)",
+									"const futureDate = new Date();",
+									"futureDate.setTime(futureDate.getTime() + (2 * 60 * 60 * 1000)); // Add 2 hours in milliseconds",
+									"const isoString = futureDate.toISOString();",
+									"pm.environment.set(\"future_date\", isoString);",
+									"console.log(\"📅 Using future date:\", isoString);"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set(\"session_id\", response.data.session._id);",
+									"    console.log(\"✅ Session created:\", response.data.session._id);",
+									"} else {",
+									"    console.log(\"❌ Session creation failed:\", pm.response.text());",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"PDF Compression Test Session\",\n  \"description\": \"Session for testing PDF compression functionality\",\n  \"startTime\": \"{{future_date}}\",\n  \"maxStudents\": 50\n}"
+						},
+						"url": {
+							"raw": "{{api_url}}/sessions/create",
+							"host": ["{{api_url}}"],
+							"path": ["sessions", "create"]
+						}
+					}
+				},
+				{
+					"name": "Start Session",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{api_url}}/sessions/{{session_id}}/start",
+							"host": ["{{api_url}}"],
+							"path": ["sessions", "{{session_id}}", "start"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "📄 PDF Compression Tests",
+			"item": [
+				{
+					"name": "Upload Small PDF (< 5MB)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"PDF Upload Successful\", function () {",
+									"    pm.response.to.have.status(200);",
+									"    const response = pm.response.json();",
+									"    pm.expect(response.success).to.be.true;",
+									"});",
+									"",
+									"pm.test(\"PDF Compression Applied\", function () {",
+									"    const response = pm.response.json();",
+									"    if (response.data && response.data.file) {",
+									"        const file = response.data.file;",
+									"        pm.expect(file.compressed).to.be.true;",
+									"        pm.expect(file.compressionRatio).to.be.above(0);",
+									"        pm.expect(file.compressedFileSize).to.be.below(file.fileSize);",
+									"        ",
+									"        // Log compression stats",
+									"        console.log(`📊 Small PDF Compression Stats:`);",
+									"        console.log(`Original Size: ${(file.fileSize / 1024 / 1024).toFixed(2)} MB`);",
+									"        console.log(`Compressed Size: ${(file.compressedFileSize / 1024 / 1024).toFixed(2)} MB`);",
+									"        console.log(`Compression Ratio: ${file.compressionRatio}%`);",
+									"        console.log(`Processing Time: ${file.processingTime}ms`);",
+									"        console.log(`Method: ${file.compressionMethod}`);",
+									"        ",
+									"        // Save file ID for further testing",
+									"        pm.environment.set(\"small_pdf_id\", file._id);",
+									"    }",
+									"});",
+									"",
+									"pm.test(\"Fast Processing for Small PDF\", function () {",
+									"    const response = pm.response.json();",
+									"    if (response.data && response.data.file) {",
+									"        // Should process within 10 seconds for small PDFs",
+									"        pm.expect(response.data.file.processingTime).to.be.below(10000);",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "sessionId",
+									"value": "{{session_id}}",
+									"type": "text"
+								},
+								{
+									"key": "fileType",
+									"value": "slide",
+									"type": "text"
+								},
+								{
+									"key": "title",
+									"value": "Small PDF Test",
+									"type": "text"
+								},
+								{
+									"key": "file",
+									"type": "file",
+									"src": "test-small.pdf"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{api_url}}/upload/enhanced",
+							"host": ["{{api_url}}"],
+							"path": ["upload", "enhanced"]
+						}
+					}
+				},
+				{
+					"name": "Upload Medium PDF (5-20MB)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Medium PDF Upload Successful\", function () {",
+									"    pm.response.to.have.status(200);",
+									"    const response = pm.response.json();",
+									"    pm.expect(response.success).to.be.true;",
+									"});",
+									"",
+									"pm.test(\"Good Compression for Medium PDF\", function () {",
+									"    const response = pm.response.json();",
+									"    if (response.data && response.data.file) {",
+									"        const file = response.data.file;",
+									"        pm.expect(file.compressionRatio).to.be.above(50); // Expect >50% compression",
+									"        ",
+									"        console.log(`📊 Medium PDF Compression Stats:`);",
+									"        console.log(`Original Size: ${(file.fileSize / 1024 / 1024).toFixed(2)} MB`);",
+									"        console.log(`Compressed Size: ${(file.compressedFileSize / 1024 / 1024).toFixed(2)} MB`);",
+									"        console.log(`Compression Ratio: ${file.compressionRatio}%`);",
+									"        console.log(`Processing Time: ${file.processingTime}ms`);",
+									"        ",
+									"        pm.environment.set(\"medium_pdf_id\", file._id);",
+									"    }",
+									"});",
+									"",
+									"pm.test(\"Reasonable Processing Time\", function () {",
+									"    const response = pm.response.json();",
+									"    if (response.data && response.data.file) {",
+									"        // Should process within 30 seconds for medium PDFs",
+									"        pm.expect(response.data.file.processingTime).to.be.below(30000);",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "sessionId",
+									"value": "{{session_id}}",
+									"type": "text"
+								},
+								{
+									"key": "fileType",
+									"value": "slide",
+									"type": "text"
+								},
+								{
+									"key": "title",
+									"value": "Medium PDF Test",
+									"type": "text"
+								},
+								{
+									"key": "file",
+									"type": "file",
+									"src": "test-medium.pdf"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{api_url}}/upload/enhanced",
+							"host": ["{{api_url}}"],
+							"path": ["upload", "enhanced"]
+						}
+					}
+				},
+				{
+					"name": "Upload Large PDF (20-50MB)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Large PDF Upload Successful\", function () {",
+									"    pm.response.to.have.status(200);",
+									"    const response = pm.response.json();",
+									"    pm.expect(response.success).to.be.true;",
+									"});",
+									"",
+									"pm.test(\"Excellent Compression for Large PDF\", function () {",
+									"    const response = pm.response.json();",
+									"    if (response.data && response.data.file) {",
+									"        const file = response.data.file;",
+									"        pm.expect(file.compressionRatio).to.be.above(70); // Expect >70% compression",
+									"        ",
+									"        console.log(`📊 Large PDF Compression Stats:`);",
+									"        console.log(`Original Size: ${(file.fileSize / 1024 / 1024).toFixed(2)} MB`);",
+									"        console.log(`Compressed Size: ${(file.compressedFileSize / 1024 / 1024).toFixed(2)} MB`);",
+									"        console.log(`Compression Ratio: ${file.compressionRatio}%`);",
+									"        console.log(`Processing Time: ${file.processingTime}ms`);",
+									"        console.log(`Adaptive timeout used: ${file.processingTime > 60000 ? 'Yes' : 'No'}`);",
+									"        ",
+									"        pm.environment.set(\"large_pdf_id\", file._id);",
+									"    }",
+									"});",
+									"",
+									"pm.test(\"Adaptive Timeout Working\", function () {",
+									"    const response = pm.response.json();",
+									"    if (response.data && response.data.file) {",
+									"        // Should process within 5 minutes with adaptive timeout",
+									"        pm.expect(response.data.file.processingTime).to.be.below(300000);",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "sessionId",
+									"value": "{{session_id}}",
+									"type": "text"
+								},
+								{
+									"key": "fileType",
+									"value": "slide",
+									"type": "text"
+								},
+								{
+									"key": "title",
+									"value": "Large PDF Test",
+									"type": "text"
+								},
+								{
+									"key": "file",
+									"type": "file",
+									"src": "test-large.pdf"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{api_url}}/upload/enhanced",
+							"host": ["{{api_url}}"],
+							"path": ["upload", "enhanced"]
+						}
+					}
+				},
+				{
+					"name": "Concurrent PDF Upload Test 1",
+					"event": [
+						{
+							"listen": "pre-request",
+							"script": {
+								"exec": [
+									"// Generate unique title for concurrent testing",
+									"const timestamp = Date.now();",
+									"pm.environment.set(\"concurrent_title_1\", `Concurrent PDF Test 1 - ${timestamp}`);"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Concurrent Upload 1 Successful\", function () {",
+									"    pm.response.to.have.status(200);",
+									"    const response = pm.response.json();",
+									"    pm.expect(response.success).to.be.true;",
+									"    console.log(`✅ Concurrent Upload 1 completed in ${response.data.file.processingTime}ms`);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "sessionId",
+									"value": "{{session_id}}",
+									"type": "text"
+								},
+								{
+									"key": "fileType",
+									"value": "slide",
+									"type": "text"
+								},
+								{
+									"key": "title",
+									"value": "{{concurrent_title_1}}",
+									"type": "text"
+								},
+								{
+									"key": "file",
+									"type": "file",
+									"src": "test-concurrent-1.pdf"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{api_url}}/upload/enhanced",
+							"host": ["{{api_url}}"],
+							"path": ["upload", "enhanced"]
+						}
+					}
+				},
+				{
+					"name": "Concurrent PDF Upload Test 2",
+					"event": [
+						{
+							"listen": "pre-request",
+							"script": {
+								"exec": [
+									"const timestamp = Date.now();",
+									"pm.environment.set(\"concurrent_title_2\", `Concurrent PDF Test 2 - ${timestamp}`);"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Concurrent Upload 2 Successful\", function () {",
+									"    pm.response.to.have.status(200);",
+									"    const response = pm.response.json();",
+									"    pm.expect(response.success).to.be.true;",
+									"    console.log(`✅ Concurrent Upload 2 completed in ${response.data.file.processingTime}ms`);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "sessionId",
+									"value": "{{session_id}}",
+									"type": "text"
+								},
+								{
+									"key": "fileType",
+									"value": "slide",
+									"type": "text"
+								},
+								{
+									"key": "title",
+									"value": "{{concurrent_title_2}}",
+									"type": "text"
+								},
+								{
+									"key": "file",
+									"type": "file",
+									"src": "test-concurrent-2.pdf"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{api_url}}/upload/enhanced",
+							"host": ["{{api_url}}"],
+							"path": ["upload", "enhanced"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "📊 File Management",
+			"item": [
+				{
+					"name": "Get Session Files",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Session files retrieved\", function () {",
+									"    pm.response.to.have.status(200);",
+									"    const response = pm.response.json();",
+									"    pm.expect(response.success).to.be.true;",
+									"    ",
+									"    if (response.data && response.data.slides) {",
+									"        console.log(`📁 Found ${response.data.slides.length} slide files`);",
+									"        response.data.slides.forEach((slide, index) => {",
+									"            console.log(`${index + 1}. ${slide.originalName} - ${slide.compressed ? 'Compressed' : 'Original'}`);",
+									"        });",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{api_url}}/upload/session/{{session_id}}/files",
+							"host": ["{{api_url}}"],
+							"path": ["upload", "session", "{{session_id}}", "files"]
+						}
+					}
+				},
+				{
+					"name": "Get Compressed PDF Download URL",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{api_url}}/upload/session/{{session_id}}/slide/{{small_pdf_id}}/download/compressed",
+							"host": ["{{api_url}}"],
+							"path": ["upload", "session", "{{session_id}}", "slide", "{{small_pdf_id}}", "download", "compressed"]
+						}
+					}
+				},
+				{
+					"name": "Get Original PDF Download URL",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{api_url}}/upload/session/{{session_id}}/slide/{{small_pdf_id}}/download/original",
+							"host": ["{{api_url}}"],
+							"path": ["upload", "session", "{{session_id}}", "slide", "{{small_pdf_id}}", "download", "original"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "🧪 Error Testing",
+			"item": [
+				{
+					"name": "Upload Non-PDF File as Slide",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Non-PDF file rejected\", function () {",
+									"    // Should return 400 or similar error",
+									"    pm.expect(pm.response.code).to.be.oneOf([400, 422]);",
+									"    console.log(\"✅ Non-PDF file properly rejected\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "sessionId",
+									"value": "{{session_id}}",
+									"type": "text"
+								},
+								{
+									"key": "fileType",
+									"value": "slide",
+									"type": "text"
+								},
+								{
+									"key": "title",
+									"value": "Invalid File Test",
+									"type": "text"
+								},
+								{
+									"key": "file",
+									"type": "file",
+									"src": "test-image.jpg"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{api_url}}/upload/enhanced",
+							"host": ["{{api_url}}"],
+							"path": ["upload", "enhanced"]
+						}
+					}
+				},
+				{
+					"name": "Upload Without Authentication",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Unauthorized request rejected\", function () {",
+									"    pm.response.to.have.status(401);",
+									"    console.log(\"✅ Unauthorized request properly rejected\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "sessionId",
+									"value": "{{session_id}}",
+									"type": "text"
+								},
+								{
+									"key": "fileType",
+									"value": "slide",
+									"type": "text"
+								},
+								{
+									"key": "title",
+									"value": "Unauthorized Test",
+									"type": "text"
+								},
+								{
+									"key": "file",
+									"type": "file",
+									"src": "test-small.pdf"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{api_url}}/upload/enhanced",
+							"host": ["{{api_url}}"],
+							"path": ["upload", "enhanced"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "🏥 Health Check",
+			"item": [
+				{
+					"name": "Health Check",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Server is healthy\", function () {",
+									"    pm.response.to.have.status(200);",
+									"    console.log(\"✅ Server is running and healthy\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": ["{{base_url}}"],
+							"path": ["health"]
+						}
+					}
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Global pre-request script",
+					"console.log(`🚀 Running: ${pm.info.requestName}`);",
+					"console.log(`📍 URL: ${pm.request.url}`);",
+					"",
+					"// Verify environment variables",
+					"if (!pm.environment.get('base_url')) {",
+					"    console.warn('⚠️ base_url not set in environment');",
+					"}",
+					"if (!pm.environment.get('api_url')) {",
+					"    console.warn('⚠️ api_url not set in environment');",
+					"}"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Global test script",
+					"console.log(`📊 Response: ${pm.response.code} ${pm.response.status}`);",
+					"console.log(`⏱️ Response Time: ${pm.response.responseTime}ms`);",
+					"",
+					"// Log any errors",
+					"if (pm.response.code >= 400) {",
+					"    console.error(`❌ Error Response:`, pm.response.text());",
+					"}"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:5000",
+			"type": "string"
+		},
+		{
+			"key": "api_url",
+			"value": "{{base_url}}/api",
+			"type": "string"
+		}
+	]
+}

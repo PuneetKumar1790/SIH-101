@@ -249,18 +249,24 @@ class VideoService {
   }
 
   // Extract audio from video
-  async extractAudio(videoPath, outputPath) {
+  async extractAudio(videoPath, outputPath, quality = '128k') {
     return new Promise((resolve, reject) => {
       ffmpeg(videoPath)
-        .audioCodec('mp3')
-        .audioBitrate('128k')
+        .audioCodec('libmp3lame')
+        .audioBitrate(quality)
+        .outputOptions([
+          '-vn', // No video stream
+          '-map_metadata', '0', // Copy metadata
+          '-id3v2_version', '3', // ID3v2.3 tags
+          '-write_id3v1', '1' // Write ID3v1 tags
+        ])
         .output(outputPath)
         .on('end', () => {
-          logInfo('Audio extracted from video', { videoPath, outputPath });
+          logInfo('Audio extracted from video (MP3 only)', { videoPath, outputPath, quality });
           resolve();
         })
         .on('error', (err) => {
-          logError('Audio extraction error', err, { videoPath, outputPath });
+          logError('Audio extraction error', err, { videoPath, outputPath, quality });
           reject(err);
         })
         .run();

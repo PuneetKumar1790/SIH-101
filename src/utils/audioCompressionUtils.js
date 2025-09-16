@@ -311,7 +311,7 @@ class AudioCompressionUtils {
       const metadata = await this.getAudioMetadata(tempInputPath);
 
       // Convert format
-      await this.pervertFormat(inputPath, tempOutputPath, targetFormat);
+      await this.performFormat(tempInputPath, tempOutputPath, targetFormat);
 
       // Read converted audio
       const convertedBuffer = fs.readFileSync(tempOutputPath);
@@ -359,7 +359,7 @@ class AudioCompressionUtils {
    * @param {string} targetFormat - Target format
    * @returns {Promise<void>}
    */
-  async pervertFormat(inputPath, outputPath, targetFormat) {
+  async performFormat(inputPath, outputPath, targetFormat) {
     return new Promise((resolve, reject) => {
       const codecMap = {
         'm4a': 'aac',

@@ -5,6 +5,8 @@ const compressionUtils = require('../utils/compressionUtils');
 const azureUtils = require('../utils/azureUtils');
 const slideCompressionUtils = require('../utils/slideCompressionUtils');
 const audioCompressionUtils = require('../utils/audioCompressionUtils');
+const pdfCompressionUtils = require('../utils/pdfCompressionUtils');
+const videoToAudioUtils = require('../utils/videoToAudioUtils');
 const { catchAsync, AppError } = require('../middleware/errorHandler');
 const { 
   sendSuccess, 
@@ -106,7 +108,7 @@ const uploadFile = catchAsync(async (req, res) => {
   }
 
   try {
-    const result = await processFileUpload(req.file, fileType, sessionId, session);
+    const result = await processFileUpload(req.file, fileType, sessionId, session, req);
     
     if (!result.success) {
       return sendError(res, result.error, 500);
@@ -136,7 +138,7 @@ const uploadFile = catchAsync(async (req, res) => {
 /**
  * Process file upload based on type
  */
-async function processFileUpload(file, fileType, sessionId, session) {
+async function processFileUpload(file, fileType, sessionId, session, req) {
   const timestamp = Date.now();
   const randomId = Math.random().toString(36).substring(7);
   const fileExtension = path.extname(file.originalname);
@@ -185,8 +187,12 @@ async function processVideoUpload(file, baseFileName, sessionId, session) {
     compressionUtils.compressVideo(file.buffer, '360p')
   ]);
 
-  // Extract audio from video
-  const audioResult = await compressionUtils.extractAudioFromVideo(file.buffer);
+  // Extract audio from video using proper MP3 extraction
+  const audioResult = await videoToAudioUtils.extractAudioFromVideo(
+    file.buffer, 
+    file.originalname, 
+    '128k'
+  );
 
   // Upload compressed versions
   const versions = [];
@@ -238,7 +244,7 @@ async function processVideoUpload(file, baseFileName, sessionId, session) {
     }
   }
 
-  // Upload audio version
+  // Upload audio version (true MP3 audio-only)
   let audioVersion = null;
   if (audioResult.success) {
     const audioFileName = `${baseFileName}_audio.mp3`;
@@ -254,7 +260,12 @@ async function processVideoUpload(file, baseFileName, sessionId, session) {
         fileName: audioFileName,
         url: audioUpload.url,
         duration: audioResult.metadata.duration,
-        fileSize: audioResult.buffer.length
+        fileSize: audioResult.audioSize,
+        bitrate: audioResult.metadata.bitrate,
+        sampleRate: audioResult.metadata.sampleRate,
+        channels: audioResult.metadata.channels,
+        isAudioOnly: true,
+        compressionRatio: audioResult.compressionRatio
       };
       processedFiles.push(audioFileName);
     }
@@ -410,10 +421,43 @@ async function processSlideUpload(file, baseFileName, sessionId, session, req) {
     throw new Error('Failed to upload original slide file: ' + originalUpload.error);
   }
 
-  // Compress slide file (skip compression for PDFs to avoid pdf2pic issues)
+  // Handle PDF compression with dedicated utility
   let compressionResult = { success: false, compressed: false };
   
-  if (file.mimetype !== 'application/pdf') {
+  if (file.mimetype === 'application/pdf') {
+    try {
+      // Use dedicated PDF compression utility
+      compressionResult = await pdfCompressionUtils.compressPDF(
+        file.buffer,
+        file.originalname
+      );
+      
+      logInfo('PDF compression processing completed', {
+        originalName: file.originalname,
+        originalSize: pdfCompressionUtils.formatFileSize(file.size),
+        compressed: compressionResult.compressed,
+        compressionRatio: compressionResult.compressionRatio,
+        skipped: compressionResult.skipped,
+        reason: compressionResult.reason || compressionResult.error
+      });
+    } catch (compressionError) {
+      logError('PDF compression error', compressionError, {
+        originalName: file.originalname,
+        originalSize: file.size
+      });
+      // Continue with original file if compression fails
+      compressionResult = {
+        success: true,
+        compressed: false,
+        buffer: file.buffer,
+        originalSize: file.size,
+        compressedSize: file.size,
+        compressionRatio: 0,
+        error: compressionError.message
+      };
+    }
+  } else {
+    // Use existing slide compression for non-PDF files
     try {
       compressionResult = await slideCompressionUtils.compressSlide(
         file.buffer,
@@ -426,12 +470,15 @@ async function processSlideUpload(file, baseFileName, sessionId, session, req) {
         originalName: file.originalname
       });
       // Continue with original file if compression fails
+      compressionResult = {
+        success: true,
+        compressed: false,
+        buffer: file.buffer,
+        originalSize: file.size,
+        compressedSize: file.size,
+        compressionRatio: 0
+      };
     }
-  } else {
-    logInfo('Skipping compression for PDF file', {
-      originalName: file.originalname,
-      mimeType: file.mimetype
-    });
   }
 
   let compressedFileName = null;
@@ -467,7 +514,7 @@ async function processSlideUpload(file, baseFileName, sessionId, session, req) {
     0
   );
 
-  // Create slide file info
+  // Create slide file info with enhanced PDF metadata
   const slideFileInfo = {
     title: req.body.title || `Slide ${session.slides.length + 1}`,
     url: originalUpload.url,
@@ -476,14 +523,23 @@ async function processSlideUpload(file, baseFileName, sessionId, session, req) {
     fileSize: file.size,
     originalName: file.originalname,
     mimeType: file.mimetype,
-    // Add compressed version info
+    // Enhanced compression info for PDFs
     compressed: compressionResult.success && compressionResult.compressed,
     compressedFileName: compressedFileName,
     compressedUrl: compressedUpload?.url,
     compressedFileSize: compressionResult.compressedSize,
     compressionRatio: compressionResult.compressionRatio,
     compressionMetadata: compressionResult.metadata,
-    uploadedAt: new Date()
+    // PDF-specific metadata
+    originalUrl: originalUpload.url,
+    originalSize: file.size,
+    compressedSize: compressionResult.compressedSize || file.size,
+    compressionSkipped: compressionResult.skipped || false,
+    compressionError: compressionResult.error || null,
+    compressionStats: file.mimetype === 'application/pdf' ? 
+      pdfCompressionUtils.getCompressionStats(compressionResult) : null,
+    uploadedAt: new Date(),
+    processedAt: new Date()
   };
 
   // Update session with slide file

@@ -27,6 +27,7 @@ const sessionRoutes = require("./routes/sessionRoutes");
 const quizRoutes = require("./routes/quizRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
 const enhancedUploadRoutes = require("./routes/enhancedUploadRoutes");
+const videoProcessingRoutes = require("./routes/videoProcessingRoutes");
 
 // Import socket handlers
 const AudioSocketHandler = require("./sockets/audioSocket");
@@ -114,6 +115,7 @@ class RemoteClassroomApp {
     this.app.use("/api/quizzes", quizRoutes);
     this.app.use("/api/uploads", uploadRoutes);
     this.app.use("/api/upload", enhancedUploadRoutes);
+    this.app.use("/api/video-processing", videoProcessingRoutes);
 
     this.app.get("/", (req, res) => {
       res.status(200).json({
@@ -126,6 +128,7 @@ class RemoteClassroomApp {
           quizzes: "/api/quizzes",
           uploads: "/api/uploads",
           enhancedUploads: "/api/upload",
+          videoProcessing: "/api/video-processing",
           health: "/health",
         },
       });

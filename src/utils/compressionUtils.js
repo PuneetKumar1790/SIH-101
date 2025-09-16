@@ -29,17 +29,17 @@ class CompressionUtils {
     const settings = {
       '240p': {
         resolution: '426x240',
-        videoBitrate: '300k',      // Lower bitrate for rural areas
+        videoBitrate: '300k',
         audioBitrate: '64k',
         fps: 24,
-        preset: 'fast',            // Faster encoding
-        crf: 28,                   // Higher CRF for smaller files
+        preset: 'fast',
+        crf: 28,
         maxrate: '400k',
         bufsize: '800k'
       },
       '360p': {
         resolution: '640x360',
-        videoBitrate: '600k',      // Moderate bitrate
+        videoBitrate: '600k',
         audioBitrate: '96k',
         fps: 24,
         preset: 'fast',
@@ -50,6 +50,18 @@ class CompressionUtils {
     };
 
     return settings[quality] || settings['360p'];
+  }
+
+  /**
+   * Compress video file from input path to output path
+   * @param {string} inputPath - Input video file path
+   * @param {string} outputPath - Output video file path
+   * @param {string} quality - Target quality (240p or 360p)
+   * @returns {Promise<void>}
+   */
+  async compressVideoFile(inputPath, outputPath, quality = '360p') {
+    const settings = this.getCompressionSettings(quality);
+    return this.performCompression(inputPath, outputPath, settings);
   }
 
   /**
